@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: go-otel-sample
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+    exporters:
+      # Export traces to Jaeger
+      otlp/jaeger:
+        endpoint: jaeger:4317
+        tls:
+          insecure: true
+
+      # Export metrics to Prometheus (via remote write)
+      prometheus:
+        endpoint: 0.0.0.0:8889
+        namespace: go_samples
+
+      # Export logs to Loki
+      loki:
+        endpoint: http://loki:3100/loki/api/v1/push
+        default_labels_enabled:
+          exporter: true
+          level: true
+
+      # Debug exporter for troubleshooting
+      debug:
+        verbosity: detailed
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/jaeger, debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus, debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [loki, debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: go-otel-sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.114.0
+          args:
+            - --config=/etc/otel-collector-config.yaml
+          ports:
+            - containerPort: 4317  # OTLP gRPC
+              name: otlp-grpc
+            - containerPort: 4318  # OTLP HTTP
+              name: otlp-http
+            - containerPort: 8889  # Prometheus metrics
+              name: prometheus
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otel-collector-config.yaml
+              subPath: otel-collector-config.yaml
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: otel-collector-config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: go-otel-sample
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+    - port: 4318
+      targetPort: otlp-http
+      name: otlp-http
+    - port: 8889
+      targetPort: prometheus
+      name: prometheus
+  selector:
+    app: otel-collector

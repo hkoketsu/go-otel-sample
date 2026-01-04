@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: go-otel-sample
+
+resources:
+  - otel-collector.yaml
+  - jaeger.yaml
+  - prometheus.yaml
+  - loki.yaml
+  - grafana.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: go-otel-sample-observability
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true

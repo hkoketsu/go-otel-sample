@@ -1,0 +1,289 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: go-otel-sample
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger:16686
+        editable: true
+
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: true
+        jsonData:
+          derivedFields:
+            - datasourceUid: jaeger
+              matcherRegex: '"trace_id":"([a-f0-9]+)"'
+              name: TraceID
+              url: '$${__value.raw}'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: go-otel-sample
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: go-otel-sample
+data:
+  go-otel-sample-dashboard.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "sum(rate(go_samples_http_requests_total[5m]))",
+              "legendFormat": "Requests/sec",
+              "refId": "A"
+            }
+          ],
+          "title": "HTTP Request Rate",
+          "type": "gauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+            "tooltip": {"mode": "single", "sort": "none"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(go_samples_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p95",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(go_samples_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "p50",
+              "refId": "B"
+            }
+          ],
+          "title": "HTTP Request Duration",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "go_samples_tasks_total",
+              "legendFormat": "Tasks",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Tasks",
+          "type": "stat"
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["go-otel-sample"],
+      "templating": {"list": []},
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "",
+      "title": "Go Samples Dashboard",
+      "uid": "go-otel-sample",
+      "version": 1
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: go-otel-sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          volumeMounts:
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: grafana-dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+      volumes:
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: grafana-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: go-otel-sample
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      name: http
+  selector:
+    app: grafana
